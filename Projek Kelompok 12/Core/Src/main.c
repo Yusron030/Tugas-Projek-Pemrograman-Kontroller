@@ -22,72 +22,136 @@
 #include "usart.h"
 #include "mlx90614.h"
 #include <string.h>
+#include <stdlib.h>
 #include <stdio.h>
-#include <stdbool.h>
-/* Private variables ---------------------------------------------------------*/
 
-/* USER CODE BEGIN PV */
-/* USER CODE END PV */
+/* Hanya helper baca satu char UART */
+static char recv_char(void)
+{
+    char c;
+    while (HAL_UART_Receive(&huart2, (uint8_t*)&c, 1, HAL_MAX_DELAY) != HAL_OK) { }
+    return c;
+}
 
 int main(void)
 {
-    HAL_StatusTypeDef ret;
-    float temperature;
-    char rxBuf[16];
-    uint8_t idx;
-    bool valid;
-    char msg[32];
-
-    /* Initialize HAL and system clock */
     HAL_Init();
     SystemClock_Config();
-
-    /* Initialize peripherals */
     MX_GPIO_Init();
     MX_I2C1_Init();
     MX_USART2_UART_Init();
 
-    /* Main loop */
     for (;;)
     {
-        /* --- Number Check via UART --- */
-        const char prompt[] = "Enter number: ";
-        HAL_UART_Transmit(&huart2, (uint8_t*)prompt, strlen(prompt), HAL_MAX_DELAY);
+        /* Tampilkan menu */
+        const char menu[] =
+            "\r\n=== MENU DEBUG ===\r\n"
+            "1) Input Number Test\r\n"
+            "2) Read Temperature\r\n"
+            "3) Init MLX90614\r\n"
+            "4) Run All\r\n"
+            "Select [1-4]: ";
+        HAL_UART_Transmit(&huart2, (uint8_t*)menu, strlen(menu), HAL_MAX_DELAY);
 
-        /* Receive until carriage return or buffer full */
-        idx = 0U;
-        do {
-            HAL_UART_Receive(&huart2, (uint8_t*)&rxBuf[idx], 1U, HAL_MAX_DELAY);
-        } while ((rxBuf[idx++] != '\r') && (idx < sizeof(rxBuf) - 1U));
-        rxBuf[idx - 1U] = '\0';  /* Null-terminate */
+        char choice = recv_char();
+        HAL_UART_Transmit(&huart2, (uint8_t*)&choice, 1, HAL_MAX_DELAY);
+        HAL_UART_Transmit(&huart2, (uint8_t*)"\r\n", 2, HAL_MAX_DELAY);
 
-        /* Validate digits */
-        valid = (idx > 1U);
-        for (uint8_t i = 0U; i < idx - 1U; i++) {
-            if ((rxBuf[i] < '0') || (rxBuf[i] > '9')) {
-                valid = false;
-                break;
+        switch (choice)
+        {
+            case '1':
+            {
+                /* --- Inline check_number() --- */
+                char buf[16];
+                uint8_t idx = 0;
+                char c;
+                const char prompt[] = "Enter number: ";
+                HAL_UART_Transmit(&huart2, (uint8_t*)prompt, strlen(prompt), HAL_MAX_DELAY);
+
+                while (1)
+                {
+                    HAL_UART_Receive(&huart2, (uint8_t*)&c, 1, HAL_MAX_DELAY);
+                    if (c=='\r'||c=='\n'||idx>=sizeof(buf)-1) break;
+                    if (c>='0'&&c<='9')
+                    {
+                        buf[idx++]=c;
+                        HAL_UART_Transmit(&huart2,(uint8_t*)&c,1,HAL_MAX_DELAY);
+                    }
+                }
+                buf[idx]='\0';
+                uint8_t result_add = (uint8_t)atoi(buf);
+                char msg1[32];
+                snprintf(msg1,sizeof(msg1),"\r\nYou entered: %u\r\n", result_add);
+                HAL_UART_Transmit(&huart2,(uint8_t*)msg1,strlen(msg1),HAL_MAX_DELAY);
             }
-        }
-        if (valid) {
-            snprintf(msg, sizeof(msg), "Valid number: %s\r\n", rxBuf);
-        } else {
-            snprintf(msg, sizeof(msg), "Invalid format\r\n");
-        }
-        HAL_UART_Transmit(&huart2, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+            break;
 
-        /* --- MLX90614 Sensor Reading --- */
-        ret = MLX90614_ReadTemp(&hi2c1, MLX90614_CMD_OBJ, &temperature);
-        if (ret == HAL_OK) {
-            snprintf(msg, sizeof(msg), "Temp: %.2f C\r\n", temperature);
-            HAL_UART_Transmit(&huart2, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
-        } else {
-            Error_Handler();
-        }
+            case '2':
+            {
+                /* --- Inline measurement_result() --- */
+                float temp;
+                if (MLX90614_ReadTemp(&hi2c1, MLX90614_CMD_OBJ, &temp)==HAL_OK)
+                {
+                    char msg2[32];
+                    snprintf(msg2,sizeof(msg2),"Temp: %.2f C\r\n", temp);
+                    HAL_UART_Transmit(&huart2,(uint8_t*)msg2,strlen(msg2),HAL_MAX_DELAY);
+                }
+                else
+                {
+                    Error_Handler();
+                }
+            }
+            break;
 
-        HAL_Delay(1000U);
+            case '3':
+            {
+                /* --- Inline mlx90614_init() --- */
+                if (MLX90614_Init(&hi2c1)==HAL_OK)
+                {
+                    const char ok[]="MLX90614 OK\r\n";
+                    HAL_UART_Transmit(&huart2,(uint8_t*)ok,sizeof(ok)-1,HAL_MAX_DELAY);
+                }
+                else
+                {
+                    const char err[]="MLX90614 ERROR\r\n";
+                    HAL_UART_Transmit(&huart2,(uint8_t*)err,sizeof(err)-1,HAL_MAX_DELAY);
+                    Error_Handler();
+                }
+            }
+            break;
+
+            case '4':
+                /* Bisa panggil ulang setiap blok di atas, atau copy–paste inline */
+                break;
+
+            default:
+                HAL_UART_Transmit(&huart2,(uint8_t*)"Invalid choice\r\n",15,HAL_MAX_DELAY);
+        }
     }
 }
+
+
+/* --------------------------------------------------
+   Fungsi: measurement_result
+   Deskripsi: Baca suhu dari MLX90614 dan kirim via UART
+   -------------------------------------------------- */
+static void measurement_result(void)
+{
+    float temperature;
+
+    if (MLX90614_ReadTemp(&hi2c1, MLX90614_CMD_OBJ, &temperature) == HAL_OK)
+    {
+        char msg[32];
+        snprintf(msg, sizeof(msg), "Temp: %.2f C\r\n", temperature);
+        HAL_UART_Transmit(&huart2, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+    }
+    else
+    {
+        Error_Handler();
+    }
+}
+
+
 
 /**
   * @brief System Clock Configuration
