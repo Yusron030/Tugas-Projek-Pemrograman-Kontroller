@@ -25,6 +25,12 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+
+#define MLX90614_CMD_TA    0x06    // contoh, ini tergantung datasheet MLX90614
+
+void Error_Handler(void);
+HAL_StatusTypeDef MLX90614_Init(I2C_HandleTypeDef *hi2c);
+
 /* Hanya helper baca satu char UART */
 static char recv_char(void)
 {
@@ -121,7 +127,7 @@ int main(void)
             break;
 
             case '4':
-                /* Bisa panggil ulang setiap blok di atas, atau copy–paste inline */
+                /* Bisa panggil ulang setiap blok di atas, atau copy?paste inline */
                 break;
 
             default:
