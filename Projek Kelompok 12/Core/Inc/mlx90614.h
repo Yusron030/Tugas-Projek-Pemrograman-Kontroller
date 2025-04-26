@@ -6,6 +6,9 @@
 
 #define MLX90614_I2C_ADDR    ((uint16_t)0x5AU)
 #define MLX90614_CMD_OBJ     ((uint8_t)0x07U)
+#define MLX90614_CMD_TA    0x06
+#define MLX90614_CMD_TOBJ1 0x07
+#define MLX90614_CMD_TOBJ2 0x08
 
 HAL_StatusTypeDef
 MLX90614_ReadTemp(const I2C_HandleTypeDef * const hi2c,
