@@ -2,6 +2,7 @@
 #include "main.h"  /* Untuk Error_Handler */
 
 UART_HandleTypeDef huart2;
+void Error_Handler(void);
 
 void MX_USART2_UART_Init(void)
 {
